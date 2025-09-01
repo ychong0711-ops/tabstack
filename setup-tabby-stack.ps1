@@ -1,8 +1,7 @@
 #!/usr/bin/env pwsh
-# setup-tabby-stack.ps1
-# --------------------------------------------------
+# setup-tabby-stack.ps1  (v1.3)
 # Windows 전용 : Tabby + DevPod + Aider + CodeRabbit + Husky + SkyServe
-# MIT License 2024-09-01  v1.2
+# MIT License 2024-09-01
 # --------------------------------------------------
 # 사용법:
 #   iwr -useb https://raw.githubusercontent.com/<YOUR_GITHUB_ID>/tabstack/main/setup-tabby-stack.ps1 | iex
@@ -10,26 +9,25 @@
 
 [CmdletBinding()]
 param(
-    [switch]$NoDevPod,   # DevPod 설치 생략
-    [switch]$NoGPU       # SkyServe(GPU 서버) 설치 생략
+    [switch]$NoDevPod,
+    [switch]$NoGPU
 )
 
 # 0. 기본 설정
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 $ErrorActionPreference = 'Stop'
 
-# 1. 색상 함수
+# 1. 색상
 function Write-Info  { Write-Host "[INFO]  $($args -join ' ')" -ForegroundColor Cyan }
 function Write-Warn  { Write-Host "[WARN]  $($args -join ' ')" -ForegroundColor Yellow }
-function Write-Err   { Write-Host "[ERROR] $($args -join ' ')" -ForegroundColor Red }
 
-# 2. Winget 확인
-if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
-    Write-Warn "winget 을 찾을 수 없습니다. Microsoft Store 에서 'App Installer' 를 설치해 주세요."
+# 2. winget 확인
+if (-not (Get-Command winget -ErrorAction SilentlyComplete)) {
+    Write-Warn "winget 없음 → Microsoft Store 에서 'App Installer' 설치 후 재실행"
     exit 1
 }
 
-# 3. 공통 필수 패키지
+# 3. 공통 필수
 Write-Info "Git 설치 확인 ..."
 winget install --id Git.Git -e --silent --accept-source-agreements --accept-package-agreements
 
@@ -42,7 +40,7 @@ if (-not $NoDevPod) {
     winget install --id LoftLabs.DevPod -e --silent --accept-source-agreements --accept-package-agreements
 }
 
-# 5. SkyServe (GPU 서버 선택)
+# 5. SkyServe (선택)
 if (-not $NoGPU) {
     Write-Info "SkyServe 설치 확인 ..."
     winget install --id SkyPilot.SkyServe -e --silent --accept-source-agreements --accept-package-agreements
@@ -53,7 +51,7 @@ $py = (Get-Command python -ErrorAction SilentlyContinue) ? "python" : "py"
 & $py -m pip install --user --upgrade pip
 & $py -m pip install --user aider-chat
 
-# 7. .devcontainer (공용 DevContainer)
+# 7. .devcontainer
 $dcPath = ".devcontainer"
 if (-not (Test-Path $dcPath)) { New-Item -ItemType Directory -Path $dcPath | Out-Null }
 @'
@@ -77,32 +75,42 @@ if (-not (Test-Path $dcPath)) { New-Item -ItemType Directory -Path $dcPath | Out
 }
 '@ | Out-File "$dcPath/devcontainer.json" -Encoding utf8
 
-# 8. Husky (Git Hook)
-npm init -y 2>$null
-npm install -D husky lint-staged prettier --silent
+# 8. package.json + Husky (오류 없음)
+@'
+{
+  "name": "tabby-stack",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "lint": "lint-staged" },
+  "lint-staged": {
+    "*.{js,ts,json,md}": ["prettier --write"]
+  },
+  "devDependencies": {
+    "husky": "^8.0.3",
+    "lint-staged": "^15.0.0",
+    "prettier": "^3.0.0"
+}
+'@ | Set-Content package.json -Encoding utf8
+
+# 9. Git Hook
+npm install -D husky lint-staged prettier --silent 2>$null
 npx husky init 2>$null
 Set-Content .husky/pre-commit "npx lint-staged" -NoNewline
-$pkg = Get-Content package.json -Raw | ConvertFrom-Json
-$pkg | Add-Member -NotePropertyName "lint-staged" -NotePropertyValue @{
-    "*.{js,ts,json,md}" = @("prettier --write")
-} -Force
-$pkg | ConvertTo-Json -Depth 4 | Set-Content package.json -Encoding utf8
 
-# 9. GitHub App 안내
+# 10. 안내
 Write-Host @'
 ┌────────────────────────────────────────────┐
-│  설치 완료! GitHub App 활성화:            │
+│  설치 완료! 다음 단계:                    │
+│   devpod up .                             │
+│   sky launch -c tabby-gpu tabby.yaml      │
+│   aider src/                              │
+│  GitHub App 설치:                         │
 │   • CodeRabbit: https://github.com/apps/coderabbit │
 │   • Sweep:      https://github.com/apps/sweep-ai   │
 └────────────────────────────────────────────┘
 '@ -ForegroundColor Green
 
-# 10. 다음 단계
-Write-Host @'
-┌────────────────────────────────────────────┐
-│  다음 명령으로 바로 시작:                 │
-│   devpod up .                             │
-│   sky launch -c tabby-gpu tabby.yaml      │
-│   aider src/                              │
-└────────────────────────────────────────────┘
-'@ -ForegroundColor Cyan
+
+
+ 
+
